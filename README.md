@@ -6,7 +6,8 @@
 - 📋 **Copy** text with source tracking
 - ✂️ **Cut** text with precise positioning  
 - 📝 **Paste** directly into files
-- 📚 **History** of all operations
+- � **Indent** lines with customizable spacing
+- �📚 **History** of all operations
 - 🎯 **Character-level precision**
 
 ## Installation
@@ -32,13 +33,14 @@ Add to your MCP settings (`mcp.json`):
 ```
 
 ### 3. Restart VS Code
-The tools will be available as `@agent copy`, `@agent cut`, `@agent paste` in GitHub Copilot Chat.
+The tools will be available as ` copy`, ` cut`, ` paste` in GitHub Copilot Chat.
 
 ## Usage
 ```
-@agent copy the Dog class from sauce.py
-@agent cut lines 10-25 from target.py  
-@agent paste the copied code to line 50 in main.py
+ copy the Dog class from sauce.py
+ cut lines 10-25 from target.py  
+ @agent paste the copied code to line 50 in main.py
+@agent indent lines 15-20 by 2 levels in main.py
 ```
 
 **Note**: Line changes are not visually highlighted in GitHub Copilot Chat like they are in VS Code. To see the actual file modifications, use git version control commands (`git diff`, `git status`) to track changes. The affected line numbers are displayed in the command output for reference.

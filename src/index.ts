@@ -46,6 +46,13 @@ interface PasteTextParams {
   insertAtPosition?: number;
 }
 
+interface IndentTextParams {
+  indents: number;
+  startLine: number;
+  endLine: number;
+  file: string;
+}
+
 class TextManagerMCP {
   private clipboard: CopiedText | null = null;
   private history: CopiedText[] = [];
@@ -163,6 +170,32 @@ class TextManagerMCP {
             }
           },
           {
+            name: 'indent_text',
+            description: 'Add specified number of indentation levels (4 spaces each) before lines in a file. Can indent a single line or a range of lines.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                indents: {
+                  type: 'number',
+                  description: 'Number of indentation levels to add before each line (4 spaces per level, required)'
+                },
+                startLine: {
+                  type: 'number',
+                  description: 'Starting line number to indent (required, 1-based)'
+                },
+                endLine: {
+                  type: 'number',
+                  description: 'Ending line number to indent (required, 1-based)'
+                },
+                file: {
+                  type: 'string',
+                  description: 'File path where lines will be indented (required)'
+                }
+              },
+              required: ['indents', 'startLine', 'endLine', 'file']
+            }
+          },
+          {
             name: 'get_clipboard_info',
             description: 'Get information about the current clipboard content without pasting it. Shows source file context.',
             inputSchema: {
@@ -201,6 +234,9 @@ class TextManagerMCP {
           
           case 'paste_text':
             return this.handlePasteText(args as unknown as PasteTextParams);
+          
+          case 'indent_text':
+            return this.handleIndentText(args as unknown as IndentTextParams);
           
           case 'get_clipboard_info':
             return this.handleGetClipboardInfo();
@@ -455,6 +491,77 @@ class TextManagerMCP {
         }
       ]
     };
+  }
+
+  private handleIndentText(params: IndentTextParams) {
+    try {
+      // Validate parameters
+      if (params.indents < 0) {
+        throw new Error('Number of indents must be non-negative');
+      }
+      
+      if (params.startLine < 1 || params.endLine < 1) {
+        throw new Error('Line numbers must be 1-based (greater than 0)');
+      }
+      
+      if (params.startLine > params.endLine) {
+        throw new Error('Start line must be less than or equal to end line');
+      }
+
+      // Check if file exists
+      if (!existsSync(params.file)) {
+        throw new Error(`File does not exist: ${params.file}`);
+      }
+
+      // Read the file
+      const fileContent = readFileSync(params.file, 'utf8');
+      const lines = fileContent.split(/\r?\n/);
+
+      // Validate line numbers
+      if (params.startLine > lines.length || params.endLine > lines.length) {
+        throw new Error(`Line numbers exceed file length (${lines.length} lines)`);
+      }
+
+      // Create the indent string (4 spaces per indent level for better compatibility)
+      const indentString = '    '.repeat(params.indents);
+
+      // Apply indentation to the specified range
+      for (let i = params.startLine - 1; i <= params.endLine - 1; i++) {
+        lines[i] = indentString + lines[i];
+      }
+
+      // Write the modified content back to file
+      const newContent = lines.join('\n');
+      writeFileSync(params.file, newContent, 'utf8');
+
+      // Calculate affected lines
+      const linesAffected = params.endLine - params.startLine + 1;
+      const rangeText = params.startLine === params.endLine 
+        ? `line ${params.startLine}` 
+        : `lines ${params.startLine}-${params.endLine}`;
+
+      // Generate diff information
+      const diffInfo = this.generateDiffInfo(params.file, params.startLine, 0, linesAffected);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ Successfully added ${params.indents} indentation level${params.indents !== 1 ? 's' : ''} (${params.indents * 4} spaces) to ${rangeText} in ${params.file}\n\n📝 Modified ${linesAffected} line${linesAffected !== 1 ? 's' : ''}\n\n${diffInfo}`
+          }
+        ]
+      };
+
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Error indenting lines: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ]
+      };
+    }
   }
 
   private addToHistory(item: CopiedText) {
