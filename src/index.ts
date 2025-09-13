@@ -9,49 +9,17 @@ import {
   McpError,
   CallToolRequest,
 } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { dirname } from 'path';
-import { mkdirSync } from 'fs';
 
-// Types for our text manager
-interface CopiedText {
-  content: string;
-  sourceFile?: string;
-  startLine?: number;
-  endLine?: number;
-  copiedAt: Date;
-}
+// Import types
+import { CopiedText, CopyTextParams, CutTextParams, PasteTextParams, IndentTextParams } from './types/index.js';
 
-interface CopyTextParams {
-  text: string;
-  sourceFile: string;
-  startLine: number;
-  startPosition?: number;
-  endLine: number;
-  endPosition?: number;
-}
-
-interface CutTextParams {
-  text: string;
-  sourceFile: string;
-  startLine: number;
-  startPosition?: number;
-  endLine: number;
-  endPosition?: number;
-}
-
-interface PasteTextParams {
-  targetFile: string;
-  insertAtLine: number;
-  insertAtPosition?: number;
-}
-
-interface IndentTextParams {
-  indents: number;
-  startLine: number;
-  endLine: number;
-  file: string;
-}
+// Import function handlers
+import { handleCopyText } from './functions/copy.js';
+import { handleCutText } from './functions/cut.js';
+import { handlePasteText } from './functions/paste.js';
+import { handleIndentText } from './functions/indent.js';
+import { handleGetClipboardInfo, handleGetCopyHistory } from './functions/history.js';
+import { removeTextFromFile } from './functions/fileOperations.js';
 
 class TextManagerMCP {
   private clipboard: CopiedText | null = null;
@@ -66,7 +34,7 @@ class TextManagerMCP {
     const server = new Server(
       {
         name: 'copilot-text-manager',
-        version: '1.0.0',
+        version: '1.0.1',
       },
       {
         capabilities: {
@@ -227,22 +195,22 @@ class TextManagerMCP {
       try {
         switch (name) {
           case 'copy_text':
-            return this.handleCopyText(args as unknown as CopyTextParams);
+            return handleCopyText(args as unknown as CopyTextParams, this.addToHistory.bind(this));
           
           case 'cut_text':
-            return this.handleCutText(args as unknown as CutTextParams);
+            return handleCutText(args as unknown as CutTextParams, this.addToHistory.bind(this), removeTextFromFile);
           
           case 'paste_text':
-            return this.handlePasteText(args as unknown as PasteTextParams);
+            return handlePasteText(args as unknown as PasteTextParams, this.clipboard);
           
           case 'indent_text':
-            return this.handleIndentText(args as unknown as IndentTextParams);
+            return handleIndentText(args as unknown as IndentTextParams);
           
           case 'get_clipboard_info':
-            return this.handleGetClipboardInfo();
+            return handleGetClipboardInfo(this.clipboard);
           
           case 'get_copy_history':
-            return this.handleGetCopyHistory(args as unknown as { limit?: number });
+            return handleGetCopyHistory(this.history, args as unknown as { limit?: number });
           
           default:
             throw new McpError(
@@ -263,444 +231,16 @@ class TextManagerMCP {
     server.connect(transport);
   }
 
-  private handleCopyText(params: CopyTextParams) {
-    const copiedItem: CopiedText = {
-      content: params.text,
-      sourceFile: params.sourceFile,
-      startLine: params.startLine,
-      endLine: params.endLine,
-      copiedAt: new Date()
-    };
-
-    this.clipboard = copiedItem;
-    this.addToHistory(copiedItem);
-
-    const contextInfo = this.buildContextInfo(copiedItem);
-    const positionInfo = this.buildPositionInfo(params.startLine, params.startPosition, params.endLine, params.endPosition);
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `✅ Text copied to clipboard (${params.text.length} characters)${contextInfo}${positionInfo}`
-        }
-      ]
-    };
-  }
-
-  private handleCutText(params: CutTextParams) {
-    try {
-      // First copy to clipboard
-      const cutItem: CopiedText = {
-        content: params.text,
-        sourceFile: params.sourceFile,
-        startLine: params.startLine,
-        endLine: params.endLine,
-        copiedAt: new Date()
-      };
-
-      this.clipboard = cutItem;
-      this.addToHistory(cutItem);
-
-      // Then remove from source file
-      const diffInfo = this.removeTextFromFile(params);
-      const contextInfo = this.buildContextInfo(cutItem);
-      const positionInfo = this.buildPositionInfo(params.startLine, params.startPosition, params.endLine, params.endPosition);
-      
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✂️ Text cut from ${params.sourceFile} (${params.text.length} characters)${contextInfo}${positionInfo}\n\n${diffInfo}`
-          }
-        ]
-      };
-
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ Error cutting from file: ${error instanceof Error ? error.message : String(error)}`
-          }
-        ]
-      };
-    }
-  }
-
-  private handlePasteText(params: PasteTextParams) {
-    if (!this.clipboard) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: '❌ No text in clipboard to paste'
-          }
-        ]
-      };
-    }
-
-    try {
-      // Ensure target file exists or create it
-      if (!existsSync(params.targetFile)) {
-        // Create directory if it doesn't exist
-        const dir = dirname(params.targetFile);
-        if (!existsSync(dir)) {
-          mkdirSync(dir, { recursive: true });
-        }
-        // Create empty file
-        writeFileSync(params.targetFile, '', 'utf8');
-      }
-
-      // Read the target file
-      const fileContent = readFileSync(params.targetFile, 'utf8');
-      const lines = fileContent.split(/\r?\n/);
-
-      // Ensure we have enough lines
-      while (lines.length < params.insertAtLine) {
-        lines.push('');
-      }
-
-      // Get the target line (convert from 1-based to 0-based)
-      const targetLineIndex = params.insertAtLine - 1;
-      const targetLine = lines[targetLineIndex] || '';
-
-      // Determine insertion position
-      const insertPosition = params.insertAtPosition !== undefined 
-        ? Math.min(params.insertAtPosition, targetLine.length)
-        : targetLine.length;
-
-      // Split the content to insert by lines
-      const contentLines = this.clipboard.content.split(/\r?\n/);
-
-      if (contentLines.length === 1) {
-        // Single line insertion
-        const newLine = targetLine.slice(0, insertPosition) + 
-                       contentLines[0] + 
-                       targetLine.slice(insertPosition);
-        lines[targetLineIndex] = newLine;
-      } else {
-        // Multi-line insertion
-        const firstPart = targetLine.slice(0, insertPosition);
-        const lastPart = targetLine.slice(insertPosition);
-        
-        // Replace the target line with first part + first content line
-        lines[targetLineIndex] = firstPart + contentLines[0];
-        
-        // Insert middle lines
-        for (let i = 1; i < contentLines.length - 1; i++) {
-          lines.splice(targetLineIndex + i, 0, contentLines[i]);
-        }
-        
-        // Insert last content line + last part
-        if (contentLines.length > 1) {
-          lines.splice(targetLineIndex + contentLines.length - 1, 0, 
-                      contentLines[contentLines.length - 1] + lastPart);
-        }
-      }
-
-      // Write the modified content back to file
-      const newContent = lines.join('\n');
-      writeFileSync(params.targetFile, newContent, 'utf8');
-
-      // Generate diff information
-      const linesAdded = contentLines.length;
-      const diffInfo = this.generateDiffInfo(params.targetFile, params.insertAtLine, linesAdded, 0);
-      const sourceInfo = this.buildContextInfo(this.clipboard);
-      const positionInfo = params.insertAtPosition !== undefined 
-        ? ` at position ${params.insertAtPosition}` 
-        : ' at end of line';
-      
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ Successfully pasted content to ${params.targetFile} at line ${params.insertAtLine}${positionInfo}${sourceInfo}\n\n📝 Pasted ${this.clipboard.content.length} characters (${this.clipboard.content.split('\n').length} lines)\n\n${diffInfo}`
-          }
-        ]
-      };
-
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ Error pasting to file: ${error instanceof Error ? error.message : String(error)}`
-          }
-        ]
-      };
-    }
-  }
-
-  private handleGetClipboardInfo() {
-    if (!this.clipboard) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: '📋 Clipboard is empty'
-          }
-        ]
-      };
-    }
-
-    const contextInfo = this.buildContextInfo(this.clipboard);
-    const preview = this.clipboard.content.length > 100 
-      ? `${this.clipboard.content.substring(0, 100)}...` 
-      : this.clipboard.content;
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `📋 Clipboard info:${contextInfo}\\n\\n📝 Content preview (${this.clipboard.content.length} characters):\\n\`\`\`\\n${preview}\\n\`\`\``
-        }
-      ]
-    };
-  }
-
-  private handleGetCopyHistory(params: { limit?: number }) {
-    const limit = Math.min(params.limit || 10, this.maxHistorySize);
-    const recentItems = this.history.slice(-limit).reverse();
-
-    if (recentItems.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: '📚 Copy history is empty'
-          }
-        ]
-      };
-    }
-
-    const historyText = recentItems.map((item, index) => {
-      const contextInfo = this.buildContextInfo(item);
-      const preview = item.content.length > 50 
-        ? `${item.content.substring(0, 50)}...` 
-        : item.content;
-      
-      return `${index + 1}. ${contextInfo}\\n   Preview: \`${preview.replace(/\\n/g, '\\\\n')}\``;
-    }).join('\\n\\n');
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `📚 Copy History (${recentItems.length} items):\\n\\n${historyText}`
-        }
-      ]
-    };
-  }
-
-  private handleIndentText(params: IndentTextParams) {
-    try {
-      // Validate parameters - allow negative values for unindenting
-      if (params.startLine < 1 || params.endLine < 1) {
-        throw new Error('Line numbers must be 1-based (greater than 0)');
-      }
-      
-      if (params.startLine > params.endLine) {
-        throw new Error('Start line must be less than or equal to end line');
-      }
-
-      // Check if file exists
-      if (!existsSync(params.file)) {
-        throw new Error(`File does not exist: ${params.file}`);
-      }
-
-      // Read the file
-      const fileContent = readFileSync(params.file, 'utf8');
-      const lines = fileContent.split(/\r?\n/);
-
-      // Validate line numbers
-      if (params.startLine > lines.length || params.endLine > lines.length) {
-        throw new Error(`Line numbers exceed file length (${lines.length} lines)`);
-      }
-
-      // Handle both indentation (positive) and unindentation (negative)
-      if (params.indents >= 0) {
-        // Indenting: add spaces
-        const indentString = '    '.repeat(params.indents);
-        for (let i = params.startLine - 1; i <= params.endLine - 1; i++) {
-          lines[i] = indentString + lines[i];
-        }
-      } else {
-        // Unindenting: remove spaces
-        const spacesToRemove = Math.abs(params.indents) * 4;
-        for (let i = params.startLine - 1; i <= params.endLine - 1; i++) {
-          let line = lines[i];
-          let removedSpaces = 0;
-          
-          // Remove leading spaces up to the specified amount
-          while (removedSpaces < spacesToRemove && line.startsWith(' ')) {
-            line = line.substring(1);
-            removedSpaces++;
-          }
-          
-          lines[i] = line;
-        }
-      }
-
-      // Write the modified content back to file
-      const newContent = lines.join('\n');
-      writeFileSync(params.file, newContent, 'utf8');
-
-      // Calculate affected lines
-      const linesAffected = params.endLine - params.startLine + 1;
-      const rangeText = params.startLine === params.endLine 
-        ? `line ${params.startLine}` 
-        : `lines ${params.startLine}-${params.endLine}`;
-
-      // Generate diff information
-      const diffInfo = this.generateDiffInfo(params.file, params.startLine, 0, linesAffected);
-
-      // Generate success message based on operation type
-      const operation = params.indents >= 0 ? 'indented' : 'unindented';
-      const levelText = Math.abs(params.indents) === 1 ? 'level' : 'levels';
-      const spaceText = params.indents >= 0 
-        ? `(${params.indents * 4} spaces)` 
-        : `(up to ${Math.abs(params.indents) * 4} spaces)`;
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ Successfully ${operation} ${rangeText} by ${Math.abs(params.indents)} ${levelText} ${spaceText} in ${params.file}\n\n📝 Modified ${linesAffected} line${linesAffected !== 1 ? 's' : ''}\n\n${diffInfo}`
-          }
-        ]
-      };
-
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ Error indenting lines: ${error instanceof Error ? error.message : String(error)}`
-          }
-        ]
-      };
-    }
-  }
-
-  private addToHistory(item: CopiedText) {
+  private addToHistory(item: CopiedText): CopiedText {
+    this.clipboard = item;
     this.history.push(item);
     
     // Keep history size manageable
     if (this.history.length > this.maxHistorySize) {
       this.history.shift();
     }
-  }
-
-  private buildContextInfo(item: CopiedText): string {
-    let info = `\\n🕒 ${item.copiedAt.toISOString()}`;
     
-    if (item.sourceFile) {
-      info += `\\n📁 Source: ${item.sourceFile}`;
-      
-      if (item.startLine !== undefined) {
-        if (item.endLine !== undefined && item.endLine !== item.startLine) {
-          info += ` (lines ${item.startLine}-${item.endLine})`;
-        } else {
-          info += ` (line ${item.startLine})`;
-        }
-      }
-    }
-    
-    return info;
-  }
-
-  private buildPositionInfo(startLine: number, startPos: number | undefined, endLine: number, endPos: number | undefined): string {
-    let info = '';
-    if (startPos !== undefined || endPos !== undefined) {
-      info += `\\n📍 Position: `;
-      if (startLine === endLine) {
-        info += `line ${startLine}, chars ${startPos || 0}-${endPos || 'end'}`;
-      } else {
-        info += `${startLine}:${startPos || 0} to ${endLine}:${endPos || 'end'}`;
-      }
-    }
-    return info;
-  }
-
-  private removeTextFromFile(params: CutTextParams): string {
-    if (!existsSync(params.sourceFile)) {
-      throw new Error(`Source file does not exist: ${params.sourceFile}`);
-    }
-
-    const fileContent = readFileSync(params.sourceFile, 'utf8');
-    // Handle both Windows (\r\n) and Unix (\n) line endings
-    const lines = fileContent.split(/\r?\n/);
-
-    const startIdx = params.startLine - 1;
-    const endIdx = params.endLine - 1;
-    const startPos = params.startPosition || 0;
-    const endPos = params.endPosition;
-
-    if (startIdx < 0 || startIdx >= lines.length || endIdx < 0 || endIdx >= lines.length) {
-      throw new Error(`Invalid line range: ${params.startLine}-${params.endLine}. File has ${lines.length} lines.`);
-    }
-
-    if (startIdx > endIdx) {
-      throw new Error(`Start line ${params.startLine} cannot be greater than end line ${params.endLine}`);
-    }
-
-    let linesRemoved = 0;
-
-    if (startIdx === endIdx) {
-      // Single line removal
-      const line = lines[startIdx];
-      const actualEndPos = endPos !== undefined ? endPos : line.length;
-      
-      if (startPos >= line.length) {
-        throw new Error(`Start position ${startPos} is beyond line length ${line.length}`);
-      }
-      
-      const removedText = line.slice(startPos, actualEndPos);
-      const newLine = line.slice(0, startPos) + line.slice(actualEndPos);
-      lines[startIdx] = newLine;
-      
-      // For single line cuts, report characters removed
-      linesRemoved = removedText.includes('\n') ? removedText.split('\n').length - 1 : 0;
-    } else {
-      // Multi-line removal
-      const firstLine = lines[startIdx];
-      const lastLine = lines[endIdx];
-      const actualEndPos = endPos !== undefined ? endPos : lastLine.length;
-      
-      const newLine = firstLine.slice(0, startPos) + lastLine.slice(actualEndPos);
-      lines[startIdx] = newLine;
-      
-      // Remove lines in between and the last line
-      linesRemoved = endIdx - startIdx;
-      lines.splice(startIdx + 1, linesRemoved);
-    }
-
-    // Write back to file using proper newlines
-    const newContent = lines.join('\n');
-    writeFileSync(params.sourceFile, newContent, 'utf8');
-
-    return this.generateDiffInfo(params.sourceFile, params.startLine, 0, linesRemoved);
-  }
-
-  private generateDiffInfo(filePath: string, lineNumber: number, linesAdded: number, linesRemoved: number): string {
-    const fileName = filePath.split(/[\\\\/]/).pop() || filePath;
-    let diffText = '';
-
-    if (linesAdded > 0 && linesRemoved > 0) {
-      diffText = `📊 \`${fileName}\` +${linesAdded} -${linesRemoved}`;
-    } else if (linesAdded > 0) {
-      diffText = `📊 \`${fileName}\` +${linesAdded}`;
-    } else if (linesRemoved > 0) {
-      diffText = `📊 \`${fileName}\` -${linesRemoved}`;
-    }
-
-    // Add clickable diff link (GitHub Copilot style)
-    if (diffText) {
-      diffText += `\\n\\n[📝 View changes in ${fileName}](vscode://file/${filePath}:${lineNumber})`;
-    }
-
-    return diffText;
+    return item;
   }
 }
 
