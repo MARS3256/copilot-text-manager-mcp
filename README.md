@@ -41,6 +41,10 @@ The tools will be available as `@agent copy`, `@agent cut`, `@agent paste` in Gi
 @agent paste the copied code to line 50 in main.py
 ```
 
+**Note**: Line changes are not visually highlighted in GitHub Copilot Chat like they are in VS Code. To see the actual file modifications, use git version control commands (`git diff`, `git status`) to track changes. The affected line numbers are displayed in the command output for reference.
+
+*Visual diff highlighting in Copilot Chat is planned for a future release.*
+
 ## Why Use This?
 - **Token Efficient**: Move code instead of regenerating
 - **Preserves Context**: Tracks source file and line numbers
