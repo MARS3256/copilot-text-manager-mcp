@@ -1,6 +1,6 @@
 {
   "name": "copilot-text-manager-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for GitHub Copilot - copy/cut/paste code with precision. Reduces token usage by avoiding code regeneration.",
   "type": "module",
   "main": "dist/index.js",
