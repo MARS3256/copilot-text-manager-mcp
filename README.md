@@ -1,4 +1,17 @@
-# MCP Copilot Text Manager
+# MC## Features
+- 📋 **Copy** text with so## Usage
+```
+@agent copy the Dog class from sauce.py
+@agent cut lines 10-25 from target.py  
+@agent paste the copied code to line 50 in main.py
+@agent indent lines 15-20 by 2 levels in main.py
+@agent indent lines 5-8 by -3 levels in test.py  # Unindent by 3 levels
+```acking
+- ✂️ **Cut** text with precise positioning  
+- 📝 **Paste** directly into files
+- 🔢 **Indent/Unindent** lines with customizable spacing (supports negative values)
+- 📚 **History** of all operations
+- 🎯 **Character-level precision**ot Text Manager
 
 **Beta** - Efficient copy/cut/paste tools for GitHub Copilot agents. Reduces token usage by moving existing code instead of regenerating it.
 

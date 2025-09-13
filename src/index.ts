@@ -171,13 +171,13 @@ class TextManagerMCP {
           },
           {
             name: 'indent_text',
-            description: 'Add specified number of indentation levels (4 spaces each) before lines in a file. Can indent a single line or a range of lines.',
+            description: 'Add or remove indentation levels (4 spaces each) from lines in a file. Supports both indenting (positive values) and unindenting (negative values). Can process single line or line ranges.',
             inputSchema: {
               type: 'object',
               properties: {
                 indents: {
                   type: 'number',
-                  description: 'Number of indentation levels to add before each line (4 spaces per level, required)'
+                  description: 'Number of indentation levels to add (positive) or remove (negative). Each level equals 4 spaces. Use negative values like -2 to unindent by 2 levels.'
                 },
                 startLine: {
                   type: 'number',
@@ -495,11 +495,7 @@ class TextManagerMCP {
 
   private handleIndentText(params: IndentTextParams) {
     try {
-      // Validate parameters
-      if (params.indents < 0) {
-        throw new Error('Number of indents must be non-negative');
-      }
-      
+      // Validate parameters - allow negative values for unindenting
       if (params.startLine < 1 || params.endLine < 1) {
         throw new Error('Line numbers must be 1-based (greater than 0)');
       }
@@ -522,12 +518,28 @@ class TextManagerMCP {
         throw new Error(`Line numbers exceed file length (${lines.length} lines)`);
       }
 
-      // Create the indent string (4 spaces per indent level for better compatibility)
-      const indentString = '    '.repeat(params.indents);
-
-      // Apply indentation to the specified range
-      for (let i = params.startLine - 1; i <= params.endLine - 1; i++) {
-        lines[i] = indentString + lines[i];
+      // Handle both indentation (positive) and unindentation (negative)
+      if (params.indents >= 0) {
+        // Indenting: add spaces
+        const indentString = '    '.repeat(params.indents);
+        for (let i = params.startLine - 1; i <= params.endLine - 1; i++) {
+          lines[i] = indentString + lines[i];
+        }
+      } else {
+        // Unindenting: remove spaces
+        const spacesToRemove = Math.abs(params.indents) * 4;
+        for (let i = params.startLine - 1; i <= params.endLine - 1; i++) {
+          let line = lines[i];
+          let removedSpaces = 0;
+          
+          // Remove leading spaces up to the specified amount
+          while (removedSpaces < spacesToRemove && line.startsWith(' ')) {
+            line = line.substring(1);
+            removedSpaces++;
+          }
+          
+          lines[i] = line;
+        }
       }
 
       // Write the modified content back to file
@@ -543,11 +555,18 @@ class TextManagerMCP {
       // Generate diff information
       const diffInfo = this.generateDiffInfo(params.file, params.startLine, 0, linesAffected);
 
+      // Generate success message based on operation type
+      const operation = params.indents >= 0 ? 'indented' : 'unindented';
+      const levelText = Math.abs(params.indents) === 1 ? 'level' : 'levels';
+      const spaceText = params.indents >= 0 
+        ? `(${params.indents * 4} spaces)` 
+        : `(up to ${Math.abs(params.indents) * 4} spaces)`;
+
       return {
         content: [
           {
             type: 'text',
-            text: `✅ Successfully added ${params.indents} indentation level${params.indents !== 1 ? 's' : ''} (${params.indents * 4} spaces) to ${rangeText} in ${params.file}\n\n📝 Modified ${linesAffected} line${linesAffected !== 1 ? 's' : ''}\n\n${diffInfo}`
+            text: `✅ Successfully ${operation} ${rangeText} by ${Math.abs(params.indents)} ${levelText} ${spaceText} in ${params.file}\n\n📝 Modified ${linesAffected} line${linesAffected !== 1 ? 's' : ''}\n\n${diffInfo}`
           }
         ]
       };
