@@ -12,7 +12,7 @@
 
 ## Installation
 
-### 1. Download the build or manually build the MCP Server
+### 1. Download the release build or manually build the MCP Server
 ```bash
 cd src
 npm install
