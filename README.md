@@ -1,17 +1,4 @@
-# MC## Features
-- 📋 **Copy** text with so## Usage
-```
-@agent copy the Dog class from sauce.py
-@agent cut lines 10-25 from target.py  
-@agent paste the copied code to line 50 in main.py
-@agent indent lines 15-20 by 2 levels in main.py
-@agent indent lines 5-8 by -3 levels in test.py  # Unindent by 3 levels
-```acking
-- ✂️ **Cut** text with precise positioning  
-- 📝 **Paste** directly into files
-- 🔢 **Indent/Unindent** lines with customizable spacing (supports negative values)
-- 📚 **History** of all operations
-- 🎯 **Character-level precision**ot Text Manager
+# MCP Copilot Text Manager
 
 **Beta** - Efficient copy/cut/paste tools for GitHub Copilot agents. Reduces token usage by moving existing code instead of regenerating it.
 
@@ -19,8 +6,8 @@
 - 📋 **Copy** text with source tracking
 - ✂️ **Cut** text with precise positioning  
 - 📝 **Paste** directly into files
-- � **Indent** lines with customizable spacing
-- �📚 **History** of all operations
+- 🔢 **Indent/Unindent** lines with customizable spacing (supports negative values for unindenting)
+- 📚 **History** of all operations
 - 🎯 **Character-level precision**
 
 ## Installation
@@ -39,21 +26,23 @@ Add to your MCP settings (`mcp.json`):
   "servers": {
     "text-manager": {
       "command": "node",
-      "args": ["C:/path/to/mcp-copilot-text-manager/build/index.js"]
+      "args": ["C:/path/to/mcp-copilot-text-manager/src/dist/index.js"],
+      "cwd": "C:/path/to/mcp-copilot-text-manager/src"
     }
   }
 }
 ```
 
 ### 3. Restart VS Code
-The tools will be available as ` copy`, ` cut`, ` paste` in GitHub Copilot Chat.
+The tools will be available as `@agent copy`, `@agent cut`, `@agent paste`, `@agent indent` in GitHub Copilot Chat.
 
 ## Usage
 ```
- copy the Dog class from sauce.py
- cut lines 10-25 from target.py  
- @agent paste the copied code to line 50 in main.py
+@agent copy the Dog class from sauce.py
+@agent cut lines 10-25 from target.py  
+@agent paste the copied code to line 50 in main.py
 @agent indent lines 15-20 by 2 levels in main.py
+@agent indent lines 5-8 by -3 levels in test.py  # Unindent by 3 levels
 ```
 
 **Note**: Line changes are not visually highlighted in GitHub Copilot Chat like they are in VS Code. To see the actual file modifications, use git version control commands (`git diff`, `git status`) to track changes. The affected line numbers are displayed in the command output for reference.
