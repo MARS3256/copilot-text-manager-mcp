@@ -12,7 +12,7 @@
 
 ## Installation
 
-### 1. Build the MCP Server
+### 1. Download the build or manually build the MCP Server
 ```bash
 cd src
 npm install
@@ -20,6 +20,10 @@ npm run build
 ```
 
 ### 2. Configure VS Code
+Copy the build folder to your project. 
+
+`Ctrl+Shift+P` -> `MCP: Open User Configuration`
+
 Add to your MCP settings (`mcp.json`):
 ```json
 {
@@ -34,6 +38,8 @@ Add to your MCP settings (`mcp.json`):
 ```
 
 ### 3. Restart VS Code
+`Ctrl+Shift+P` -> `Reload Window`
+
 The tools will be available as `@agent copy`, `@agent cut`, `@agent paste`, `@agent indent` in GitHub Copilot Chat.
 
 ## Usage
