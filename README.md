@@ -70,23 +70,6 @@ The tools will be available as `@agent copy`, `@agent cut`, `@agent paste`, `@ag
 4. Push branch: `git push origin feature/your-feature`
 5. Open PR with description of changes
 
-## Upload Instructions
-
-### Initial Setup
-```bash
-git init
-git add .
-git commit -m "Initial commit: MCP Copilot Text Manager v1.0.1"
-git branch -M main
-git remote add origin https://github.com/MARS3256/copilot-text-manager-mcp.git
-git push -u origin main
-```
-
-### Creating Releases
-```bash
-git tag -a v1.0.1 -m "Release v1.0.1: Core copy/cut/paste functionality"
-git push origin v1.0.1
-```
 
 ## License
 MIT License - See [LICENSE](./LICENSE) file for details.
